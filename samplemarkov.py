@@ -34,13 +34,12 @@ def create_markov_model():
     with open('sample.txt', encoding='utf-8') as f:
         text = f.read()
 
-    for match in re.finditer(r'\b[a-zA-Z]+?\b', text, re.IGNORECASE):
+    for match in re.finditer(r'(?<=(. ))\b[a-zA-Z]+?\b', text, re.IGNORECASE):
         word = match.group(0).lower()
         if word not in all_words:
             all_words[word] = Word()
-
-    for first_word in re.finditer(r'\. \b([a-zA-Z]+?)\b', text):
-        beginning_words.append(first_word.group(1))
+        if match.group(1) == '. ':  # if the group match is a period
+            beginning_words.append(word.title())
 
     for key in all_words.keys():
         regex_string = r'\b' + key + r'\b ?(\.|[a-zA-Z]+\b)'
@@ -81,6 +80,7 @@ for i in range(5):
     sentence = choices(beginning_words)
 
     while sentence[-1] != '.':
+      # print(sentence)
         prev_word = sentence[-1].lower()
         next_word = all_words[prev_word].next_word()
         sentence += next_word
