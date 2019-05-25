@@ -1,128 +1,94 @@
-#!/usr/bin/env python
+#! /usr/bin/env python
 # -*- coding: utf-8 -*-
 # python 3.6.4
 
-import random
+from random import choices
 import re
 import json
-import numpy
+import os
 
 
-print("initializing")
+class Word(object):
 
+    def __init__(self, initial_dict=None, instances=None):
+        self.follow_dict = initial_dict or {}
+        self.all_instances = instances or 0
 
-class word():
-
-    def __init__(self, initialDict=None, instanceCount=None):
-        if initialDict is None and instanceCount is None:
-            self.followDict = {}
-            self.allInstances = 0
-        else:
-            self.followDict = initialDict
-            self.allInstances = instanceCount
-        return
-
-    def addFollowingWord(self, newWord):
+    def add_following_word(self, new_word):
         try:
-            count = self.followDict[newWord][0]
-            self.allInstances += 1
-            self.followDict[newWord] = (count + 1, count / self.allInstances)
+            count = self.follow_dict[new_word]
+            self.all_instances += 1
+            self.follow_dict[new_word] = count + 1
         except KeyError:
-            self.allInstances += 1
-            self.followDict[newWord] = (1, 1 / self.allInstances)
-        for each in self.followDict.keys():
-            eachCount = self.followDict[each][0]
-            self.followDict[each] = (eachCount, eachCount / self.allInstances)
-        return
+            self.all_instances += 1
+            self.follow_dict[new_word] = 1
 
-    def nextWord(self):
-        # sumProb = sum([prob for (count,prob) in self.followDict.values()])
-        # print(sumProb)
-        if len(self.followDict) == 0:  # if the dictionary is empty
-            return "."
+    def next_word(self):
+        if not self.follow_dict:  # if the dictionary is empty
+            return ['.']
         else:
-            probs = [prob for (count, prob) in self.followDict.values()]
-            return numpy.random.choice(list(self.followDict.keys()),
-                                       p=probs)
+            probs = [count for count in self.follow_dict.values()]
+            return choices(list(self.follow_dict.keys()),
+                                weights=probs)
 
 
-def prepareJsonWrite(wordDict, initialWords):
-    print("preparing json write")
-    allData = {}
-    allData['initialWords'] = initialWords
-    allData['words'] = {}
-    for key in wordDict.keys():
-        try:
-            test = allData['words'][key]
-            print(test)
-        except KeyError:
+def save_markov_model(all_words, beginning_words):
+    allData = {'beginning_words': beginning_words,
+               'words': {},
+               }
+
+    for key in all_words.keys():
+        if key not in allData['words']:
             allData['words'][key] = {}
-        allData['words'][key]['nextWords'] = wordDict[key].followDict
-        allData['words'][key]['instanceCount'] = wordDict[key].allInstances
-    print("writing json to file")
-    with open('savedWords.txt', 'w') as file:
-        json.dump(allData, file)
-    return
+        allData['words'][key]['next_words'] = all_words[key].follow_dict
+        allData['words'][key]['instances'] = all_words[key].all_instances
+
+    with open('markov_words.json', 'w') as f:
+        json.dump(allData, f)
 
 
-try:
-    print("reading json file")
-    with open('savedWords.txt', encoding='utf-8') as file:
-        jsonData = json.loads(file.read())
+all_words = {}
+if 'markov_words.json' in os.listdir():
+    with open('markov_words.json', encoding='utf-8') as f:
+        jsonData = json.load(f)
 
-    initialWords = jsonData['initialWords']
+    beginning_words = jsonData['beginning_words']
 
-    wordDict = {}
     for key, value in jsonData['words'].items():
-        wordDict[key] = word(initialDict=value['nextWords'],
-                             instanceCount=value['instanceCount'])
-except IOError:
-    print("json file does not exist")
-    wordDict = {}
-    initialWords = []
+        all_words[key] = Word(initial_dict=value['next_words'],
+                             instances=value['instances'])
+else:
+    beginning_words = []
 
-    print("reading file")
+    with open('sample.txt', encoding='utf-8') as f:
+        text = f.read()
 
-    with open('sample.txt', encoding='utf-8') as file:
-        text = file.read()
+    for match in re.finditer(r'\b[a-zA-Z]+?\b', text, re.IGNORECASE):
+        word = match.group(0).lower()
+        if word not in all_words:
+            all_words[word] = Word()
 
-    print("creating word class instances")
+    for first_word in re.finditer(r'\. \b([a-zA-Z]+?)\b', text):
+        beginning_words.append(first_word.group(1))
 
-    for wordMatch in re.finditer(r'\b[a-zA-Z]+?\b', text, re.IGNORECASE):
-        try:
-            test = wordDict[wordMatch.group(0).lower()]
-        except KeyError:
-            wordDict[wordMatch.group(0).lower()] = word()
-
-    print("finding sentence start words")
-
-    for startWord in re.finditer(r'\. \b([a-zA-Z]+?)\b', text):
-        initialWords.append(startWord.group(1))
-
-    print("finding next word probabilities")
-
-    for key in wordDict.keys():
+    for key in all_words.keys():
         regex_string = r'\b' + key + r'\b ?(\.|[a-zA-Z]+\b)'
         for match in re.finditer(regex_string, text, re.IGNORECASE):
-            wordDict[str(key)].addFollowingWord(match.group(1))
+            all_words[str(key)].add_following_word(match.group(1))
 
-    prepareJsonWrite(wordDict, initialWords)
-
-print("generating markov sentence")
+    save_markov_model(all_words, beginning_words)
 
 while True:
-    randomWord = random.choice(initialWords)
-    printList = [randomWord]
+    sentence = choices(beginning_words)
 
-    while True:
-        previousWord = printList[len(printList) - 1].lower()
-        nextWord = wordDict[previousWord].nextWord()
-        if nextWord == ".":
-            break
-        printList.append(nextWord)
+    next_word = ''
+    while next_word != ['.']:
+        prev_word = sentence[-1].lower()
+        next_word = all_words[prev_word].next_word()
+        sentence += next_word
 
     print("markov sentence:\n")
-    print(" ".join(printList) + ".")
+    print(' '.join(sentence))
     choice = input("\ngenerate more? y/n\n")
     if choice == 'n':
         break
