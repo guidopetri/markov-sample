@@ -34,7 +34,8 @@ def create_markov_model():
     with open('sample.txt', encoding='utf-8') as f:
         text = f.read()
 
-    for match in re.finditer(r'(?<=(.[ \'\-\"\(]))\b[a-zA-Z]+?\b(?= ?(\.|.*?\b([a-zA-Z]+?)\b))', text, re.IGNORECASE):
+    pat = r'(?<=(.[ \'\-\"\(]))\b[a-zA-Z]+?\b(?= ?(\.|.*?\b([a-zA-Z]+?)\b))'
+    for match in re.finditer(pat, text, re.IGNORECASE):
         word = match.group(0).lower()
         if word not in all_words:
             all_words[word] = Word()
@@ -48,7 +49,7 @@ def create_markov_model():
 
 def save_markov_model(all_words, beginning_words):
     data = {'beginning_words': beginning_words,
-            'words': {key: word.__dict__ for key,word in all_words.items()},
+            'words': {key: word.__dict__ for key, word in all_words.items()},
             }
 
     with open('markov_words.json', 'w') as f:
