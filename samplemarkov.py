@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 # python 3.6.4
 
-from random import choices
 import re
 import json
-import os
+from random import choices
+from os import listdir
 
 
 class Word(object):
@@ -15,50 +15,21 @@ class Word(object):
         self.all_instances = instances or 0
 
     def add_following_word(self, new_word):
-        try:
-            count = self.follow_dict[new_word]
-            self.all_instances += 1
-            self.follow_dict[new_word] = count + 1
-        except KeyError:
-            self.all_instances += 1
-            self.follow_dict[new_word] = 1
+        self.follow_dict[new_word] = self.follow_dict.get(new_word, 0) + 1
+        self.all_instances += 1
 
     def next_word(self):
         if not self.follow_dict:  # if the dictionary is empty
             return ['.']
-        else:
-            probs = [count for count in self.follow_dict.values()]
-            return choices(list(self.follow_dict.keys()),
-                                weights=probs)
+
+        probs = [count for count in self.follow_dict.values()]
+        return choices(list(self.follow_dict.keys()),
+                       weights=probs)
 
 
-def save_markov_model(all_words, beginning_words):
-    allData = {'beginning_words': beginning_words,
-               'words': {},
-               }
-
-    for key in all_words.keys():
-        if key not in allData['words']:
-            allData['words'][key] = {}
-        allData['words'][key]['next_words'] = all_words[key].follow_dict
-        allData['words'][key]['instances'] = all_words[key].all_instances
-
-    with open('markov_words.json', 'w') as f:
-        json.dump(allData, f)
-
-
-all_words = {}
-if 'markov_words.json' in os.listdir():
-    with open('markov_words.json', encoding='utf-8') as f:
-        jsonData = json.load(f)
-
-    beginning_words = jsonData['beginning_words']
-
-    for key, value in jsonData['words'].items():
-        all_words[key] = Word(initial_dict=value['next_words'],
-                             instances=value['instances'])
-else:
+def create_markov_model():
     beginning_words = []
+    all_words = {}
 
     with open('sample.txt', encoding='utf-8') as f:
         text = f.read()
@@ -74,21 +45,44 @@ else:
     for key in all_words.keys():
         regex_string = r'\b' + key + r'\b ?(\.|[a-zA-Z]+\b)'
         for match in re.finditer(regex_string, text, re.IGNORECASE):
-            all_words[str(key)].add_following_word(match.group(1))
+            all_words[key].add_following_word(match.group(1))
+    return all_words, beginning_words
 
+
+def save_markov_model(all_words, beginning_words):
+    data = {'beginning_words': beginning_words,
+            'words': {key: word.__dict__ for key,word in all_words.items()},
+            }
+
+    with open('markov_words.json', 'w') as f:
+        json.dump(data, f)
+
+
+def load_markov_model():
+    with open('markov_words.json', encoding='utf-8') as f:
+        data = json.load(f)
+
+    beginning_words = data['beginning_words']
+    all_words = {}
+
+    for key, value in data['words'].items():
+        all_words[key] = Word(initial_dict=value['follow_dict'],
+                              instances=value['all_instances'])
+    return all_words, beginning_words
+
+
+if 'markov_words.json' in listdir():
+    all_words, beginning_words = load_markov_model()
+else:
+    all_words, beginning_words = create_markov_model()
     save_markov_model(all_words, beginning_words)
 
-while True:
+for i in range(5):
     sentence = choices(beginning_words)
 
-    next_word = ''
-    while next_word != ['.']:
+    while sentence[-1] != '.':
         prev_word = sentence[-1].lower()
         next_word = all_words[prev_word].next_word()
         sentence += next_word
 
-    print("markov sentence:\n")
-    print(' '.join(sentence))
-    choice = input("\ngenerate more? y/n\n")
-    if choice == 'n':
-        break
+    print(' '.join(sentence[:-1]) + '.')
